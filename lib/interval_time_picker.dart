@@ -5,9 +5,9 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/material.dart';
 
 // Examples can assume:
 // late BuildContext context;
@@ -63,6 +63,55 @@ enum TimePickerEntryMode {
   ///
   /// There is no user interface to switch to another mode.
   inputOnly
+}
+
+extension TimeOfDayCompareTo on TimeOfDay {
+  int compareTo(TimeOfDay compared) {
+    if (hour < compared.hour) return -1;
+    if (hour > compared.hour) return 1;
+    if (minute < compared.minute) return -1;
+    if (minute > compared.minute) return 1;
+    return 0;
+  }
+}
+
+extension TimeOfDayDistanceTo on TimeOfDay {
+  TimeOfDay distanceTo(TimeOfDay compared) {
+    if (this.compareTo(compared) == 0) return TimeOfDay(hour: 0, minute: 0);
+    int hours;
+    int minutes;
+    if (this.compareTo(compared) > 0) {
+      hours = hour - compared.hour;
+      minutes = minute - compared.minute;
+      if (minutes < 0) {
+        hours -= 1;
+        minutes += 60;
+      }
+    } else {
+      hours = compared.hour - hour;
+      minutes = compared.minute - minute;
+      if (minutes < 0) {
+        hours -= 1;
+        minutes += 60;
+      }
+    }
+    return TimeOfDay(hour: hours, minute: minutes);
+  }
+}
+
+extension TimeOfDayMinorDistanceTo on TimeOfDay {
+  TimeOfDay minorDistanceTo(TimeOfDay compared) {
+    final clockwiseDistance = this.distanceTo(compared);
+    final counterClockwiseDistance = clockwiseDistance.distanceTo(TimeOfDay(
+      hour: 23,
+      minute: 59,
+    ));
+    if (clockwiseDistance.compareTo(counterClockwiseDistance) <= 0) {
+      return clockwiseDistance;
+    } else {
+      return counterClockwiseDistance;
+    }
+  }
 }
 
 /// Provides properties for rendering time picker header fragments.
@@ -957,6 +1006,8 @@ class _Dial extends StatefulWidget {
     required this.selectedTime,
     required this.interval,
     required this.visibleStep,
+    required this.from,
+    required this.to,
     required this.mode,
     required this.use24HourDials,
     required this.onChanged,
@@ -966,6 +1017,8 @@ class _Dial extends StatefulWidget {
   final TimeOfDay selectedTime;
   final int interval;
   final int visibleStep;
+  final TimeOfDay from;
+  final TimeOfDay to;
   final _TimePickerMode mode;
   final bool use24HourDials;
   final ValueChanged<TimeOfDay>? onChanged;
@@ -1054,6 +1107,25 @@ class _DialState extends State<_Dial> with SingleTickerProviderStateMixin {
 
   TimeOfDay _getTimeForTheta(double theta, {bool roundMinutes = false}) {
     final double fraction = (0.25 - (theta % _kTwoPi) / _kTwoPi) % 1.0;
+    final List<int> allowedHours = [];
+    final List<int> allowedMinutes = [];
+    for (var i = widget.from.hour; i <= widget.to.hour; i++) {
+      if (widget.interval == 120) {
+        if ((i - widget.from.hour) * 60 % widget.interval == 0) {
+          allowedHours.add(i);
+        }
+      } else {
+        allowedHours.add(i);
+      }
+    }
+    for (var i = widget.from.minute; i < widget.from.minute + 60; i++) {
+      final minute = i % 60;
+      if ((minute - widget.from.minute) % widget.interval == 0) {
+        allowedMinutes.add(minute);
+      }
+    }
+    allowedHours.sort();
+    allowedMinutes.sort();
     if (widget.mode == _TimePickerMode.hour) {
       int newHour;
       if (widget.use24HourDials) {
@@ -1064,14 +1136,89 @@ class _DialState extends State<_Dial> with SingleTickerProviderStateMixin {
             TimeOfDay.hoursPerPeriod;
         newHour = newHour + widget.selectedTime.periodOffset;
       }
-      return widget.selectedTime.replacing(hour: newHour);
+      TimeOfDay newSelectedTime = widget.selectedTime.replacing(
+        hour: newHour,
+        minute: widget.from.minute,
+      );
+      final exceededFrom = newSelectedTime.compareTo(widget.from) < 0;
+      final exceededTo = newSelectedTime.compareTo(widget.to) > 0;
+      if (exceededFrom || exceededTo) {
+        if (newSelectedTime
+                .minorDistanceTo(widget.from)
+                .compareTo(newSelectedTime.minorDistanceTo(widget.to)) <=
+            0) {
+          newSelectedTime = widget.from;
+        } else {
+          newSelectedTime = widget.to;
+        }
+      }
+      if (!allowedHours.contains(newSelectedTime.hour)) {
+        int closestHour = newSelectedTime.hour - 1;
+        if (closestHour < 0) closestHour = 23;
+        while (!allowedHours.contains(closestHour)) {
+          closestHour -= 1;
+          if (closestHour < 0) closestHour = 23;
+        }
+        newSelectedTime = newSelectedTime.replacing(hour: closestHour);
+      }
+      if (!allowedMinutes.contains(newSelectedTime.minute)) {
+        int closestMinute = newSelectedTime.minute - 1;
+        if (closestMinute < 0) closestMinute = 59;
+        while (!allowedMinutes.contains(closestMinute) ||
+            TimeOfDay(hour: newSelectedTime.hour, minute: closestMinute)
+                    .compareTo(widget.from) <
+                0 ||
+            TimeOfDay(hour: newSelectedTime.hour, minute: closestMinute)
+                    .compareTo(widget.to) >
+                0) {
+          closestMinute -= 1;
+          if (closestMinute < 0) closestMinute = 59;
+          if (closestMinute == newSelectedTime.minute - 1) {
+            int closestHour = newSelectedTime.hour - 1;
+            if (closestHour < 0) closestHour = 23;
+            while (!allowedHours.contains(closestHour) ||
+                closestHour == newSelectedTime.hour) {
+              closestHour -= 1;
+              if (closestHour < 0) closestHour = 23;
+            }
+            newSelectedTime = newSelectedTime.replacing(hour: closestHour);
+          }
+        }
+        newSelectedTime = newSelectedTime.replacing(minute: closestMinute);
+      }
+      return newSelectedTime;
     } else {
       int minute = (fraction * TimeOfDay.minutesPerHour).round() %
           TimeOfDay.minutesPerHour;
-      minute = ((minute + (widget.interval / 2).floor()) ~/ widget.interval) *
-          widget.interval %
-          TimeOfDay.minutesPerHour;
-      return widget.selectedTime.replacing(minute: minute);
+      TimeOfDay newSelectedTime = widget.selectedTime.replacing(minute: minute);
+      final exceededFrom = newSelectedTime.compareTo(widget.from) < 0;
+      final exceededTo = newSelectedTime.compareTo(widget.to) > 0;
+      if (exceededFrom || exceededTo) {
+        if (newSelectedTime
+                .minorDistanceTo(widget.from)
+                .compareTo(newSelectedTime.minorDistanceTo(widget.to)) <=
+            0) {
+          newSelectedTime = widget.from;
+        } else {
+          newSelectedTime = widget.to;
+        }
+      }
+      if (!allowedMinutes.contains(newSelectedTime.minute)) {
+        int closestMinute = newSelectedTime.minute - 1;
+        if (closestMinute < 0) closestMinute = 59;
+        while (!allowedMinutes.contains(closestMinute) ||
+            TimeOfDay(hour: newSelectedTime.hour, minute: closestMinute)
+                    .compareTo(widget.from) <
+                0 ||
+            TimeOfDay(hour: newSelectedTime.hour, minute: closestMinute)
+                    .compareTo(widget.to) >
+                0) {
+          closestMinute -= 1;
+          if (closestMinute < 0) closestMinute = 59;
+        }
+        newSelectedTime = newSelectedTime.replacing(minute: closestMinute);
+      }
+      return newSelectedTime;
     }
   }
 
@@ -1357,6 +1504,8 @@ class _TimePickerInput extends StatefulWidget {
   const _TimePickerInput({
     required this.initialSelectedTime,
     required this.interval,
+    required this.from,
+    required this.to,
     required this.helpText,
     required this.errorInvalidText,
     required this.hourLabelText,
@@ -1372,6 +1521,12 @@ class _TimePickerInput extends StatefulWidget {
 
   /// The interval to be used.
   final int interval;
+
+  /// The minimum allowed time to be selected.
+  final TimeOfDay from;
+
+  /// The maximum allowed time to be selected.
+  final TimeOfDay to;
 
   /// Optionally provide your own help text to the time picker.
   final String? helpText;
@@ -1910,8 +2065,10 @@ class IntervalTimePickerDialog extends StatefulWidget {
   const IntervalTimePickerDialog({
     super.key,
     required this.initialTime,
-    this.interval = 1,
+    this.interval = 60,
     this.visibleStep = VisibleStep.fifths,
+    this.from = const TimeOfDay(hour: 0, minute: 0),
+    this.to = const TimeOfDay(hour: 23, minute: 59),
     this.cancelText,
     this.confirmText,
     this.helpText,
@@ -1935,6 +2092,12 @@ class IntervalTimePickerDialog extends StatefulWidget {
 
   /// The interval for the visible minute labels in the dial.
   final VisibleStep visibleStep;
+
+  /// The minimum allowed time to be picked.
+  final TimeOfDay from;
+
+  /// The maximum allowed time to be picked.
+  final TimeOfDay to;
 
   /// Optionally provide your own text for the cancel button.
   ///
@@ -2407,6 +2570,8 @@ class _IntervalTimePickerDialogState extends State<IntervalTimePickerDialog>
               child: _Dial(
                 interval: _interval,
                 visibleStep: _visibleStep,
+                from: widget.from,
+                to: widget.to,
                 mode: _mode.value,
                 use24HourDials: use24HourDials,
                 selectedTime: _selectedTime.value,
@@ -2479,6 +2644,8 @@ class _IntervalTimePickerDialogState extends State<IntervalTimePickerDialog>
                 _TimePickerInput(
                   initialSelectedTime: _selectedTime.value,
                   interval: _interval,
+                  from: widget.from,
+                  to: widget.to,
                   helpText: widget.helpText,
                   errorInvalidText: widget.errorInvalidText,
                   hourLabelText: widget.hourLabelText,
@@ -2614,8 +2781,10 @@ class _IntervalTimePickerDialogState extends State<IntervalTimePickerDialog>
 Future<TimeOfDay?> showIntervalTimePicker({
   required BuildContext context,
   required TimeOfDay initialTime,
-  int interval = 1,
+  int interval = 60,
   VisibleStep visibleStep = VisibleStep.fifths,
+  TimeOfDay from = const TimeOfDay(hour: 0, minute: 0),
+  TimeOfDay to = const TimeOfDay(hour: 23, minute: 59),
   TransitionBuilder? builder,
   bool useRootNavigator = true,
   TimePickerEntryMode initialEntryMode = TimePickerEntryMode.dial,
@@ -2629,13 +2798,22 @@ Future<TimeOfDay?> showIntervalTimePicker({
   EntryModeChangeCallback? onEntryModeChanged,
   Offset? anchorPoint,
 }) async {
-  assert(interval >= 1 && interval <= 60);
+  assert(interval == 10 ||
+      interval == 15 ||
+      interval == 20 ||
+      interval == 30 ||
+      interval == 60 ||
+      interval == 120);
+  assert(from.compareTo(to) <= 0);
+  assert(initialTime.compareTo(from) >= 0 && initialTime.compareTo(to) <= 0);
   assert(debugCheckHasMaterialLocalizations(context));
 
   final Widget dialog = IntervalTimePickerDialog(
     initialTime: initialTime,
     interval: interval,
     visibleStep: visibleStep,
+    from: from,
+    to: to,
     initialEntryMode: initialEntryMode,
     cancelText: cancelText,
     confirmText: confirmText,
