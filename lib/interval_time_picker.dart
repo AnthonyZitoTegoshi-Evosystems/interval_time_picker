@@ -1173,7 +1173,10 @@ class _DialState extends State<_Dial> with SingleTickerProviderStateMixin {
                 0) {
           closestMinute -= 1;
           if (closestMinute < 0) closestMinute = 59;
-          if (closestMinute == newSelectedTime.minute - 1) {
+          if (closestMinute ==
+              (newSelectedTime.minute - 1 < 0
+                  ? 59
+                  : newSelectedTime.minute - 1)) {
             int closestHour = newSelectedTime.hour - 1;
             if (closestHour < 0) closestHour = 23;
             while (!allowedHours.contains(closestHour) ||
@@ -1587,17 +1590,48 @@ class _TimePickerInputState extends State<_TimePickerInput>
       return null;
     }
 
+    bool newHourIsValid = true;
+
+    final List<int> allowedHours = [];
+    for (var i = widget.from.hour; i <= widget.to.hour; i++) {
+      if (widget.interval == 120) {
+        if ((i - widget.from.hour) * 60 % widget.interval == 0) {
+          allowedHours.add(i);
+        }
+      } else {
+        allowedHours.add(i);
+      }
+    }
+    allowedHours.sort();
+
+    TimeOfDay newSelectedTime = TimeOfDay(
+      hour: newHour,
+      minute: _selectedTime.value.minute,
+    );
+    final exceededFrom = newSelectedTime.compareTo(widget.from) < 0;
+    final exceededTo = newSelectedTime.compareTo(widget.to) > 0;
+    if (exceededFrom || exceededTo) {
+      newHourIsValid = false;
+    }
+    if (!allowedHours.contains(newSelectedTime.hour)) {
+      newHourIsValid = false;
+    }
+
     if (MediaQuery.of(context).alwaysUse24HourFormat) {
-      if (newHour >= 0 && newHour < 24) {
+      if (newHourIsValid) {
+        _selectedTime.value = newSelectedTime;
         return newHour;
       }
     } else {
-      if (newHour > 0 && newHour < 13) {
+      if (newHour > 0 && newHour < 13 && newHourIsValid) {
         if ((_selectedTime.value.period == DayPeriod.pm && newHour != 12) ||
             (_selectedTime.value.period == DayPeriod.am && newHour == 12)) {
           newHour =
               (newHour + TimeOfDay.hoursPerPeriod) % TimeOfDay.hoursPerDay;
+          newSelectedTime =
+              TimeOfDay(hour: newHour, minute: newSelectedTime.minute);
         }
+        _selectedTime.value = newSelectedTime;
         return newHour;
       }
     }
@@ -1614,7 +1648,32 @@ class _TimePickerInputState extends State<_TimePickerInput>
       return null;
     }
 
-    if (newMinute >= 0 && newMinute < 60 && newMinute % _interval == 0) {
+    bool newMinuteIsValid = true;
+
+    final List<int> allowedMinutes = [];
+    for (var i = widget.from.minute; i < widget.from.minute + 60; i++) {
+      final minute = i % 60;
+      if ((minute - widget.from.minute) % widget.interval == 0) {
+        allowedMinutes.add(minute);
+      }
+    }
+    allowedMinutes.sort();
+
+    TimeOfDay newSelectedTime = TimeOfDay(
+      hour: _selectedTime.value.hour,
+      minute: newMinute,
+    );
+    final exceededFrom = newSelectedTime.compareTo(widget.from) < 0;
+    final exceededTo = newSelectedTime.compareTo(widget.to) > 0;
+    if (exceededFrom || exceededTo) {
+      newMinuteIsValid = false;
+    }
+    if (!allowedMinutes.contains(newSelectedTime.minute)) {
+      newMinuteIsValid = false;
+    }
+
+    if (newMinuteIsValid) {
+      _selectedTime.value = newSelectedTime;
       return newMinute;
     }
     return null;
@@ -1623,8 +1682,6 @@ class _TimePickerInputState extends State<_TimePickerInput>
   void _handleHourSavedSubmitted(String? value) {
     final int? newHour = _parseHour(value);
     if (newHour != null) {
-      _selectedTime.value =
-          TimeOfDay(hour: newHour, minute: _selectedTime.value.minute);
       widget.onChanged(_selectedTime.value);
     }
   }
@@ -1640,8 +1697,6 @@ class _TimePickerInputState extends State<_TimePickerInput>
   void _handleMinuteSavedSubmitted(String? value) {
     final int? newMinute = _parseMinute(value);
     if (newMinute != null) {
-      _selectedTime.value =
-          TimeOfDay(hour: _selectedTime.value.hour, minute: int.parse(value!));
       widget.onChanged(_selectedTime.value);
     }
   }
@@ -1653,24 +1708,32 @@ class _TimePickerInputState extends State<_TimePickerInput>
 
   String? _validateHour(String? value) {
     final int? newHour = _parseHour(value);
-    setState(() {
-      hourHasError.value = newHour == null;
+    final int? newMinute = _parseMinute(_selectedTime.value.minute.toString());
+    WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
+      setState(() {
+        hourHasError.value = newHour == null;
+        minuteHasError.value = newMinute == null;
+      });
     });
     // This is used as the validator for the [TextFormField].
     // Returning an empty string allows the field to go into an error state.
     // Returning null means no error in the validation of the entered text.
-    return newHour == null ? '' : null;
+    return newHour == null || newMinute == null ? '' : null;
   }
 
   String? _validateMinute(String? value) {
+    final int? newHour = _parseHour(_selectedTime.value.hour.toString());
     final int? newMinute = _parseMinute(value);
-    setState(() {
-      minuteHasError.value = newMinute == null;
+    WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
+      setState(() {
+        hourHasError.value = newHour == null;
+        minuteHasError.value = newMinute == null;
+      });
     });
     // This is used as the validator for the [TextFormField].
     // Returning an empty string allows the field to go into an error state.
     // Returning null means no error in the validation of the entered text.
-    return newMinute == null ? '' : null;
+    return newHour == null || newMinute == null ? '' : null;
   }
 
   @override
@@ -2036,6 +2099,7 @@ class _HourMinuteTextFieldState extends State<_HourMinuteTextField>
                     colorScheme.onSurface),
             controller: controller.value,
             decoration: inputDecoration,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             validator: widget.validator,
             onEditingComplete: () =>
                 widget.onSavedSubmitted(controller.value.text),
@@ -2065,7 +2129,7 @@ class IntervalTimePickerDialog extends StatefulWidget {
   const IntervalTimePickerDialog({
     super.key,
     required this.initialTime,
-    this.interval = 60,
+    this.interval = 1,
     this.visibleStep = VisibleStep.fifths,
     this.from = const TimeOfDay(hour: 0, minute: 0),
     this.to = const TimeOfDay(hour: 23, minute: 59),
@@ -2781,7 +2845,7 @@ class _IntervalTimePickerDialogState extends State<IntervalTimePickerDialog>
 Future<TimeOfDay?> showIntervalTimePicker({
   required BuildContext context,
   required TimeOfDay initialTime,
-  int interval = 60,
+  int interval = 1,
   VisibleStep visibleStep = VisibleStep.fifths,
   TimeOfDay from = const TimeOfDay(hour: 0, minute: 0),
   TimeOfDay to = const TimeOfDay(hour: 23, minute: 59),
@@ -2798,12 +2862,7 @@ Future<TimeOfDay?> showIntervalTimePicker({
   EntryModeChangeCallback? onEntryModeChanged,
   Offset? anchorPoint,
 }) async {
-  assert(interval == 10 ||
-      interval == 15 ||
-      interval == 20 ||
-      interval == 30 ||
-      interval == 60 ||
-      interval == 120);
+  assert(60 % interval == 0 || interval % 60 == 0);
   assert(from.compareTo(to) <= 0);
   assert(initialTime.compareTo(from) >= 0 && initialTime.compareTo(to) <= 0);
   assert(debugCheckHasMaterialLocalizations(context));
