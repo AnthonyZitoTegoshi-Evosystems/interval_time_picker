@@ -1005,6 +1005,7 @@ class _Dial extends StatefulWidget {
   const _Dial({
     required this.selectedTime,
     required this.interval,
+     this.forbiddenTimes,
     required this.visibleStep,
     required this.from,
     required this.to,
@@ -1016,6 +1017,7 @@ class _Dial extends StatefulWidget {
 
   final TimeOfDay selectedTime;
   final int interval;
+  final List<TimeOfDay> forbiddenTimes;
   final int visibleStep;
   final TimeOfDay from;
   final TimeOfDay to;
@@ -1127,6 +1129,29 @@ class _DialState extends State<_Dial> with SingleTickerProviderStateMixin {
     allowedHours.sort();
     allowedMinutes.sort();
     if (widget.mode == _TimePickerMode.hour) {
+      final List<int> disallowedHours = [];
+      for (var i = 0; i < allowedHours.length; i++) {
+        final h = allowedHours[i];
+
+        final List<int> allowedMinutes = [];
+        for (var i = widget.from.minute; i < widget.from.minute + 60; i++) {
+          final minute = i % 60;
+          if ((minute - widget.from.minute) % widget.interval == 0) {
+            allowedMinutes.add(minute);
+          }
+        }
+        allowedMinutes.sort();
+
+        final List<int> disallowedMinutes = widget.forbiddenTimes.where((element) => element.hour == h).map((e) => e.minute).toList();
+        allowedMinutes.removeWhere((element) => disallowedMinutes.contains(element));
+
+        if (allowedMinutes.isEmpty) {
+          disallowedHours.add(h);
+        }
+      }
+
+      allowedHours.removeWhere((element) => disallowedHours.contains(element));
+
       int newHour;
       if (widget.use24HourDials) {
         newHour =
@@ -1191,6 +1216,32 @@ class _DialState extends State<_Dial> with SingleTickerProviderStateMixin {
       }
       return newSelectedTime;
     } else {
+      final List<int> disallowedMinutes = [];
+      for (var i = 0; i < allowedMinutes.length; i++) {
+        final m = allowedMinutes[i];
+
+        final List<int> allowedHours = [];
+        for (var i = widget.from.hour; i <= widget.to.hour; i++) {
+          if (widget.interval == 120) {
+            if ((i - widget.from.hour) * 60 % widget.interval == 0) {
+              allowedHours.add(i);
+            }
+          } else {
+            allowedHours.add(i);
+          }
+        }
+        allowedHours.sort();
+
+        final List<int> disallowedHours = widget.forbiddenTimes.where((element) => element.minute == m).map((e) => e.hour).toList();
+        allowedHours.removeWhere((element) => disallowedHours.contains(element));
+
+        if (allowedHours.isEmpty) {
+          disallowedMinutes.add(m);
+        }
+      }
+
+      allowedMinutes.removeWhere((element) => disallowedMinutes.contains(element));
+      
       int minute = (fraction * TimeOfDay.minutesPerHour).round() %
           TimeOfDay.minutesPerHour;
       TimeOfDay newSelectedTime = widget.selectedTime.replacing(minute: minute);
@@ -1507,6 +1558,7 @@ class _TimePickerInput extends StatefulWidget {
   const _TimePickerInput({
     required this.initialSelectedTime,
     required this.interval,
+    this.forbiddenTimes,
     required this.from,
     required this.to,
     required this.helpText,
@@ -1524,6 +1576,9 @@ class _TimePickerInput extends StatefulWidget {
 
   /// The interval to be used.
   final int interval;
+
+  /// The forbiddenTimes to be used.
+  final List<TimeOfDay> forbiddenTimes;
 
   /// The minimum allowed time to be selected.
   final TimeOfDay from;
@@ -1567,6 +1622,7 @@ class _TimePickerInputState extends State<_TimePickerInput>
   late final RestorableTimeOfDay _selectedTime =
       RestorableTimeOfDay(widget.initialSelectedTime);
   late final int _interval = widget.interval;
+  late final List<TimeOfDay> _forbiddenTimes = widget.forbiddenTimes;
   final RestorableBool hourHasError = RestorableBool(false);
   final RestorableBool minuteHasError = RestorableBool(false);
 
@@ -1603,6 +1659,9 @@ class _TimePickerInputState extends State<_TimePickerInput>
       }
     }
     allowedHours.sort();
+
+    final List<int> disallowedHours = _forbiddenTimes.where((element) => element.minute == _selectedTime.value.minute).map((e) => e.hour).toList();
+    allowedHours.removeWhere((element) => disallowedHours.contains(element));
 
     TimeOfDay newSelectedTime = TimeOfDay(
       hour: newHour,
@@ -1658,6 +1717,9 @@ class _TimePickerInputState extends State<_TimePickerInput>
       }
     }
     allowedMinutes.sort();
+
+    final List<int> disallowedMinutes = _forbiddenTimes.where((element) => element.hour == _selectedTime.value.hour).map((e) => e.minute).toList();
+    allowedMinutes.removeWhere((element) => disallowedMinutes.contains(element));
 
     TimeOfDay newSelectedTime = TimeOfDay(
       hour: _selectedTime.value.hour,
@@ -2130,6 +2192,7 @@ class IntervalTimePickerDialog extends StatefulWidget {
     super.key,
     required this.initialTime,
     this.interval = 1,
+    this.forbiddenTimes,
     this.visibleStep = VisibleStep.fifths,
     this.from = const TimeOfDay(hour: 0, minute: 0),
     this.to = const TimeOfDay(hour: 23, minute: 59),
@@ -2153,6 +2216,9 @@ class IntervalTimePickerDialog extends StatefulWidget {
   /// The interval used for the minutes the user can choose.
   /// The default and minimum is 1. The maximum is 60.
   final int interval;
+
+  /// Times that are forcely forbidden
+  final List<TimeOfDay>? forbiddenTimes;
 
   /// The interval for the visible minute labels in the dial.
   final VisibleStep visibleStep;
@@ -2335,6 +2401,7 @@ class _IntervalTimePickerDialogState extends State<IntervalTimePickerDialog>
   final RestorableBool _announcedInitialTime = RestorableBool(false);
 
   late final int _interval;
+  late final List<TimeOfDay> _forbiddenTimes;
   late final int _visibleStep;
 
   late final VoidCallback _entryModeListener;
@@ -2354,6 +2421,7 @@ class _IntervalTimePickerDialogState extends State<IntervalTimePickerDialog>
         () => widget.onEntryModeChanged?.call(_entryMode.value);
     _entryMode.addListener(_entryModeListener);
     _interval = widget.interval;
+    __forbiddenTimes = widget.forbiddenTimes;
     _visibleStep = _parseVisibleStep(widget.visibleStep);
   }
 
@@ -2633,6 +2701,7 @@ class _IntervalTimePickerDialogState extends State<IntervalTimePickerDialog>
               aspectRatio: 1.0,
               child: _Dial(
                 interval: _interval,
+               forbiddenTimes: _forbiddenTimes,
                 visibleStep: _visibleStep,
                 from: widget.from,
                 to: widget.to,
@@ -2708,6 +2777,7 @@ class _IntervalTimePickerDialogState extends State<IntervalTimePickerDialog>
                 _TimePickerInput(
                   initialSelectedTime: _selectedTime.value,
                   interval: _interval,
+                  forbiddenTimes: _forbiddenTimes,
                   from: widget.from,
                   to: widget.to,
                   helpText: widget.helpText,
@@ -2846,6 +2916,7 @@ Future<TimeOfDay?> showIntervalTimePicker({
   required BuildContext context,
   required TimeOfDay initialTime,
   int interval = 1,
+  List<TimeOfDay>? forbiddenTimes,
   VisibleStep visibleStep = VisibleStep.fifths,
   TimeOfDay from = const TimeOfDay(hour: 0, minute: 0),
   TimeOfDay to = const TimeOfDay(hour: 23, minute: 59),
@@ -2870,6 +2941,7 @@ Future<TimeOfDay?> showIntervalTimePicker({
   final Widget dialog = IntervalTimePickerDialog(
     initialTime: initialTime,
     interval: interval,
+    forbiddenTimes: forbiddenTimes,
     visibleStep: visibleStep,
     from: from,
     to: to,
