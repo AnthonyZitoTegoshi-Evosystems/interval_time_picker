@@ -294,7 +294,7 @@ class _TimePickerHeader extends StatelessWidget {
             helpText ??
                 MaterialLocalizations.of(context).timePickerDialHelpText,
             style: TimePickerTheme.of(context).helpTextStyle ??
-                themeData.textTheme.overline,
+                themeData.textTheme.labelSmall,
           ),
           controls,
         ],
@@ -333,8 +333,8 @@ class _HourMinuteControl extends StatelessWidget {
               ? themeData.colorScheme.primary.withOpacity(isDark ? 0.24 : 0.12)
               : themeData.colorScheme.onSurface.withOpacity(0.12);
         });
-    final TextStyle style =
-        timePickerTheme.hourMinuteTextStyle ?? themeData.textTheme.headline2!;
+    final TextStyle style = timePickerTheme.hourMinuteTextStyle ??
+        themeData.textTheme.displayMedium!;
     final ShapeBorder shape = timePickerTheme.hourMinuteShape ?? _kDefaultShape;
 
     final Set<MaterialState> states = isSelected
@@ -461,7 +461,7 @@ class _StringFragment extends StatelessWidget {
     final ThemeData theme = Theme.of(context);
     final TimePickerThemeData timePickerTheme = TimePickerTheme.of(context);
     final TextStyle hourMinuteStyle =
-        timePickerTheme.hourMinuteTextStyle ?? theme.textTheme.headline2!;
+        timePickerTheme.hourMinuteTextStyle ?? theme.textTheme.displayMedium!;
     final Color textColor =
         timePickerTheme.hourMinuteTextColor ?? theme.colorScheme.onSurface;
 
@@ -624,7 +624,7 @@ class _DayPeriodControl extends StatelessWidget {
         ? <MaterialState>{MaterialState.selected}
         : <MaterialState>{};
     final TextStyle textStyle = timePickerTheme.dayPeriodTextStyle ??
-        Theme.of(context).textTheme.subtitle1!;
+        Theme.of(context).textTheme.titleMedium!;
     final TextStyle amStyle = textStyle.copyWith(
       color: MaterialStateProperty.resolveAs(textColor, amStates),
     );
@@ -1005,7 +1005,7 @@ class _Dial extends StatefulWidget {
   const _Dial({
     required this.selectedTime,
     required this.interval,
-     this.forbiddenTimes,
+    this.forbiddenTimes,
     required this.visibleStep,
     required this.from,
     required this.to,
@@ -1142,8 +1142,13 @@ class _DialState extends State<_Dial> with SingleTickerProviderStateMixin {
         }
         allowedMinutes.sort();
 
-        final List<int> disallowedMinutes = widget.forbiddenTimes?.where((element) => element.hour == h).map((e) => e.minute).toList() ?? [];
-        allowedMinutes.removeWhere((element) => disallowedMinutes.contains(element));
+        final List<int> disallowedMinutes = widget.forbiddenTimes
+                ?.where((element) => element.hour == h)
+                .map((e) => e.minute)
+                .toList() ??
+            [];
+        allowedMinutes
+            .removeWhere((element) => disallowedMinutes.contains(element));
 
         if (allowedMinutes.isEmpty) {
           disallowedHours.add(h);
@@ -1232,15 +1237,21 @@ class _DialState extends State<_Dial> with SingleTickerProviderStateMixin {
         }
         allowedHours.sort();
 
-        final List<int> disallowedHours = widget.forbiddenTimes?.where((element) => element.minute == m).map((e) => e.hour).toList() ?? [];
-        allowedHours.removeWhere((element) => disallowedHours.contains(element));
+        final List<int> disallowedHours = widget.forbiddenTimes
+                ?.where((element) => element.minute == m)
+                .map((e) => e.hour)
+                .toList() ??
+            [];
+        allowedHours
+            .removeWhere((element) => disallowedHours.contains(element));
 
         if (allowedHours.isEmpty) {
           disallowedMinutes.add(m);
         }
       }
 
-      allowedMinutes.removeWhere((element) => disallowedMinutes.contains(element));
+      allowedMinutes
+          .removeWhere((element) => disallowedMinutes.contains(element));
 
       int minute = (fraction * TimeOfDay.minutesPerHour).round() %
           TimeOfDay.minutesPerHour;
@@ -1425,7 +1436,7 @@ class _DialState extends State<_Dial> with SingleTickerProviderStateMixin {
 
   _TappableLabel _buildTappableLabel(TextTheme textTheme, Color color,
       int value, String label, VoidCallback onTap) {
-    final TextStyle style = textTheme.bodyText1!.copyWith(color: color);
+    final TextStyle style = textTheme.bodyLarge!.copyWith(color: color);
     final double labelScaleFactor =
         math.min(MediaQuery.of(context).textScaleFactor, 2.0);
     return _TappableLabel(
@@ -1660,7 +1671,11 @@ class _TimePickerInputState extends State<_TimePickerInput>
     }
     allowedHours.sort();
 
-    final List<int> disallowedHours = _forbiddenTimes?.where((element) => element.minute == _selectedTime.value.minute).map((e) => e.hour).toList() ?? [];
+    final List<int> disallowedHours = _forbiddenTimes
+            ?.where((element) => element.minute == _selectedTime.value.minute)
+            .map((e) => e.hour)
+            .toList() ??
+        [];
     allowedHours.removeWhere((element) => disallowedHours.contains(element));
 
     TimeOfDay newSelectedTime = TimeOfDay(
@@ -1718,8 +1733,13 @@ class _TimePickerInputState extends State<_TimePickerInput>
     }
     allowedMinutes.sort();
 
-    final List<int> disallowedMinutes = _forbiddenTimes?.where((element) => element.hour == _selectedTime.value.hour).map((e) => e.minute).toList() ?? [];
-    allowedMinutes.removeWhere((element) => disallowedMinutes.contains(element));
+    final List<int> disallowedMinutes = _forbiddenTimes
+            ?.where((element) => element.hour == _selectedTime.value.hour)
+            .map((e) => e.minute)
+            .toList() ??
+        [];
+    allowedMinutes
+        .removeWhere((element) => disallowedMinutes.contains(element));
 
     TimeOfDay newSelectedTime = TimeOfDay(
       hour: _selectedTime.value.hour,
@@ -1808,7 +1828,7 @@ class _TimePickerInputState extends State<_TimePickerInput>
     final ThemeData theme = Theme.of(context);
     final TextStyle hourMinuteStyle =
         TimePickerTheme.of(context).hourMinuteTextStyle ??
-            theme.textTheme.headline2!;
+            theme.textTheme.displayMedium!;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
@@ -1819,7 +1839,7 @@ class _TimePickerInputState extends State<_TimePickerInput>
             widget.helpText ??
                 MaterialLocalizations.of(context).timePickerInputHelpText,
             style: TimePickerTheme.of(context).helpTextStyle ??
-                theme.textTheme.overline,
+                theme.textTheme.labelSmall,
           ),
           const SizedBox(height: 16.0),
           Row(
@@ -1863,7 +1883,7 @@ class _TimePickerInputState extends State<_TimePickerInput>
                                 widget.hourLabelText ??
                                     MaterialLocalizations.of(context)
                                         .timePickerHourLabel,
-                                style: theme.textTheme.caption,
+                                style: theme.textTheme.bodySmall,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -1897,7 +1917,7 @@ class _TimePickerInputState extends State<_TimePickerInput>
                                 widget.minuteLabelText ??
                                     MaterialLocalizations.of(context)
                                         .timePickerMinuteLabel,
-                                style: theme.textTheme.caption,
+                                style: theme.textTheme.bodySmall,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -1924,7 +1944,7 @@ class _TimePickerInputState extends State<_TimePickerInput>
             Text(
               widget.errorInvalidText ??
                   MaterialLocalizations.of(context).invalidTimeLabel,
-              style: theme.textTheme.bodyText2!
+              style: theme.textTheme.bodyMedium!
                   .copyWith(color: theme.colorScheme.error),
             )
           else
@@ -2701,7 +2721,7 @@ class _IntervalTimePickerDialogState extends State<IntervalTimePickerDialog>
               aspectRatio: 1.0,
               child: _Dial(
                 interval: _interval,
-               forbiddenTimes: _forbiddenTimes,
+                forbiddenTimes: _forbiddenTimes,
                 visibleStep: _visibleStep,
                 from: widget.from,
                 to: widget.to,
